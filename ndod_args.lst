@@ -1,0 +1,2 @@
+htable=ndod.table1
+fields={'identifiant':'1,10','code_banque':'11,15','identifiant_local_du_tiers':'16,65','id_evt':'66,95','code_evt':'96,98','sous_code_evt':'99,102','commentaire_evénement':'103,302','code_banqueemettrice evt':'303,307','statut_de_levenement':'308,310','date_ouverture_de_levenement':'311,318','date_photo_de_levenement_collecte':'319,326','date_de_cloture_de_levenement':'327,334','top_echnique':'335,335','top_litige':'336,336','id_contrat':'337,386','montant':'387,405'}
