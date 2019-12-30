@@ -5,6 +5,7 @@ import ast
 from pyspark import SparkSession
 import pyspark.sql
 from pyspark.sql.types import *
+from pyspark.sql import Row
 
 sc = SparkSession.builder \
     .appName("NDOD - Convert files") \
@@ -14,27 +15,19 @@ sc = SparkSession.builder \
 
 
 def createSchema (fields, dftext):
-    tbfields = [StructField(field_name, StringType(), True) for field_name in fields]
-    content = {}
+    content = []
 
-    for l in open("C:\Users\oliveirahy\Documents\NDOD\NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt", "r"):
+    for l in open("ndod/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt", "r"):
         value = ""
+        ct = 0
         for i in list(fields):
+            ct += 1
             sp = fields[i].split(",")[0]
             ep = fields[i].split(",")[1]
-            value += l[int(sp):int(ep)] + ","
+            value += "'" + l[int(sp):int(ep)] + "'"
+            if ct < len(list(fields)):
+                value += ","
         content.append(value)
-
-    for i in list(fields):
-        value = []
-        sp = fields[i].split(",")[0]
-        ep = fields[i].split(",")[1]
-        for l in open("hdfs://tmp/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt", "r"):
-            value.append(l[int(sp):int(ep)])
-        column_name = StructType([StructField(str(i), StringType(), True)])
-        rdd = sc.parallelize(value).map(lambda x: Row(x))
-        dfcol = sqlContext.createDataFrame(rdd, column_name)
-        df = df.withColumn(lit(i), dfcol[str(i)])
 
 
 "/tmp/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt"
@@ -57,6 +50,26 @@ def main ():
     # Use the field properties to read the input file
     fields = ast.literal_eval(props["fields"])
 
-    #tbfields = [StructField(field_name, StringType(), True) for field_name in fields]
-    schema = StructType([])
-    df = sqlContext.createDataFrame(sc.emptyRDD(), schema)
+    schema = StructType([StructField(field_name, StringType(), True) for field_name in fields])
+    #df = sqlContext.createDataFrame(sc.emptyRDD(), schema)
+
+    content = []
+
+    for l in open("ndod/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt", "r"):
+        value = ""
+        ct = 0
+        for i in list(fields):
+            ct += 1
+            sp = fields[i].split(",")[0]
+            ep = fields[i].split(",")[1]
+            value += "'" + l[int(sp):int(ep)] + "'"
+            if ct < len(list(fields)):
+                value += ","
+        content.append(value)
+
+    df = sqlContext.createDataFrame(list(map(lambda x: x.split(','), content)), schema=schema)
+
+    df.registerTempTable("tmp_content")
+    sc.sql(
+        "INSERT OVERWRITE TABLE " + props['dest_table'] + " PARTITION(valueDate = " + str(
+            partition) + ") SELECT * FROM tmp_content")
