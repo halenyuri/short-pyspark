@@ -1,41 +1,23 @@
 import sys
 import logging
-import threading
 import ast
-from pyspark import SparkSession
-import pyspark.sql
+from pyspark.sql import SparkSession
 from pyspark.sql.types import *
-from pyspark.sql import Row
+
 
 sc = SparkSession.builder \
     .appName("NDOD - Convert files") \
     .config("spark.sql.warehouse.dir", "/user/hive/warehouse") \
+    .config("hive.exec.dynamic.partition", "true") \
+    .config("hive.exec.dynamic.partition.mode", "nonstrict") \
     .enableHiveSupport() \
     .getOrCreate()
 
-
-def createSchema (fields, dftext):
-    content = []
-
-    for l in open("ndod/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt", "r"):
-        value = ""
-        ct = 0
-        for i in list(fields):
-            ct += 1
-            sp = fields[i].split(",")[0]
-            ep = fields[i].split(",")[1]
-            value += "'" + l[int(sp):int(ep)] + "'"
-            if ct < len(list(fields)):
-                value += ","
-        content.append(value)
-
-
-"/tmp/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt"
 def main ():
     logger = logging.getLogger('py4j')
     logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -49,13 +31,14 @@ def main ():
 
     # Use the field properties to read the input file
     fields = ast.literal_eval(props["fields"])
+    partition = str(props["partition"]).rstrip()
 
     schema = StructType([StructField(field_name, StringType(), True) for field_name in fields])
     #df = sqlContext.createDataFrame(sc.emptyRDD(), schema)
 
     content = []
-
-    for l in open("ndod/NDOD_REST_TIERS_DELTA_30007_RCT_191204-101015.txt.txt", "r"):
+    #read the input data file and tranform it to fields separated by comma to create the dataframe
+    for l in open(sys.argv[2], "r"):
         value = ""
         ct = 0
         for i in list(fields):
@@ -67,9 +50,20 @@ def main ():
                 value += ","
         content.append(value)
 
-    df = sqlContext.createDataFrame(list(map(lambda x: x.split(','), content)), schema=schema)
+    #create the dataframe from content
+    df = sc.createDataFrame(list(map(lambda x: x.split(','), content[1:-1])), schema=schema)
+
+    logger.info("###### Processing file " + sys.argv[2] + " with HEADER " + content[0])
+    logger.info("###### Will be added " + str(df.count()) + "registers to table " + str(props["htable"]).rstrip() + " partitioned by " + partition)
 
     df.registerTempTable("tmp_content")
-    sc.sql(
-        "INSERT OVERWRITE TABLE " + props['dest_table'] + " PARTITION(valueDate = " + str(
-            partition) + ") SELECT * FROM tmp_content")
+    partition_val = df.select(str(partition)).collect()
+    logger.info("###### Partition value -> " + partition_val[0][0])
+    #sc.sql("INSERT OVERWRITE TABLE " + props['htable'] + " PARTITION(" + str(partition) + "=" + partition_val[0][0] + ") SELECT * FROM tmp_content")
+    df.write.mode("overwrite").insertInto(props["htable"])
+    #sc.sql(
+    #    "CREATE TABLE " + props['htable'] + "AS SELECT * FROM tmp_content")
+
+
+main()
+
