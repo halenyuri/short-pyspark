@@ -47,7 +47,7 @@ def fill(trades, prices):
     Combine the sets of events and fill forward the value columns so that each
     row has the most recent non-null value for the corresponding id. For
     example, given the above input tables the expected output is:
-
+    
     +---+-------------+-----+-----+-----+--------+
     | id|    timestamp|  bid|  ask|price|quantity|
     +---+-------------+-----+-----+-----+--------+
@@ -59,13 +59,13 @@ def fill(trades, prices):
     | 10|1546300806000| 37.5|37.51|37.51|   100.0|
     | 10|1546300807000| 37.5|37.51| 37.5|   200.0|
     +---+-------------+-----+-----+-----+--------+
-
+    
     :param trades: DataFrame of trade events
     :param prices: DataFrame of price events
     :return: A DataFrame of the combined events and filled.
     """
     res =  trades.select('id','timestamp',lit(None).alias('bid'),lit(None).alias('ask'),'price','quantity').union(prices.select('id','timestamp','bid','ask',lit(None).alias('price'),lit(None).alias('quantity')))
-
+    
     window = Window.partitionBy('id').orderBy('timestamp').rowsBetween(-sys.maxsize, 0)
     filled_bid = last(res['bid'], ignorenulls=True).over(window)
     filled_ask = last(res['ask'], ignorenulls=True).over(window)
@@ -79,7 +79,7 @@ def fill(trades, prices):
     
     
     res = res.sort("timestamp",ascending=True)
-    res.show()>>> filled_bid = last(res['bid'], ignorenulls=True).over(window)
+    filled_bid = last(res['bid'], ignorenulls=True).over(window)
     filled_ask = last(res['ask'], ignorenulls=True).over(window)
     filled_price = last(res['price'], ignorenulls=True).over(window)
     filled_quantity = last(res['quantity'], ignorenulls=True).over(window)    
@@ -90,8 +90,8 @@ def fill(trades, prices):
     res = res.withColumn('temp_quantity', filled_quantity).drop("quantity").withColumnRenamed("temp_quantity","quantity")    
     
     res = res.sort("timestamp",ascending=True)
-
-    retun (res)
+    
+    return res
     raise NotImplementedError()
 
 
@@ -113,11 +113,23 @@ def pivot(trades, prices):
     | 10|1546300806000| 37.5|37.51| null|    null|  37.5| 37.51|   37.51|      100.0|  null|  null|   12.67|      300.0|
     | 10|1546300807000| null| null| 37.5|   200.0|  37.5| 37.51|    37.5|      200.0|  null|  null|   12.67|      300.0|
     +---+-------------+-----+-----+-----+--------+------+------+--------+-----------+------+------+--------+-----------+
-
+    
     :param trades: DataFrame of trade events
     :param prices: DataFrame of price events
     :return: A DataFrame of the combined events and pivoted columns.
     """
+    suf = ["bid","ask","price","quantity"]
+    i = 0
+    base = fill(trades, prices)
+    ids = base.select('id').distinct().collect()
+    
+    while i < int(len(ids)):
+        for s in suf:
+            colname = str(ids[int(i)][0]) + "_" + s
+            base = base.withColumn(colname, F.col(s))
+        i += 1
+    
+    return base
     raise NotImplementedError()
 
 
